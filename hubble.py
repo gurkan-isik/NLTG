@@ -178,3 +178,46 @@ plt.grid(True, linestyle=':', alpha=0.6)
 # Grafiği kaydet
 plt.savefig('cosmicfit.png', dpi=300)
 plt.show()
+
+
+
+# 1. BAŞLANGIÇ DEĞERİ (INITIAL BOUNDARY) TESTİ
+test_p0s = [[65.0, -0.5], [75.0, -2.0], [70.0, -1.0]]
+print("\n--- BAŞLANGIÇ DEĞERİ KARARLILIK TESTİ ---")
+for p0 in test_p0s:
+    popt_test, _ = curve_fit(nltg_hz, z_obs, H_obs, sigma=err_H, p0=p0)
+    print(f"Başlangıç {p0} -> Sonuç: H0={popt_test[0]:.2f}, w_eff={popt_test[1]:.3f}")
+
+# 2. ALT ÖRNEKLEME (JACKKNIFE/SUBSAMPLING) TESTİ
+n_sub_iterations = 1000
+delta_aics = []
+n_subsample = int(0.8 * len(z_obs)) # Verinin %80'ini kullan
+k = 2
+
+for i in range(n_sub_iterations):
+    # Rastgele alt küme seçimi
+    idx = np.random.choice(len(z_obs), size=n_subsample, replace=False)
+    z_sub, H_sub, err_sub = z_obs[idx], H_obs[idx], err_H[idx]
+    
+    try:
+        # NLTG Fit
+        popt_nltg_sub, _ = curve_fit(nltg_hz, z_sub, H_sub, sigma=err_sub, p0=[70.0, -1.2])
+        chi2_nltg_sub = np.sum(((H_sub - nltg_hz(z_sub, *popt_nltg_sub)) / err_sub)**2)
+        aic_nltg_sub = chi2_nltg_sub + 2 * k
+        
+        # LCDM Fit
+        popt_lcdm_sub, _ = curve_fit(lcdm_hz_fit, z_sub, H_sub, sigma=err_sub, p0=[70.0, 0.3])
+        chi2_lcdm_sub = np.sum(((H_sub - lcdm_hz_fit(z_sub, *popt_lcdm_sub)) / err_sub)**2)
+        aic_lcdm_sub = chi2_lcdm_sub + 2 * k
+        
+        delta_aics.append(aic_nltg_sub - aic_lcdm_sub)
+    except:
+        continue
+
+print(f"\n--- ALT ÖRNEKLEME TESTİ (1000 Tekrar, %80 Veri) ---")
+print(f"Ortalama Delta AIC: {np.mean(delta_aics):.3f} ± {np.std(delta_aics):.3f}")
+
+# 3. PLANCK 2018 LİTERATÜR DEĞERLERİNE KARŞI TEST
+chi2_planck = np.sum(((H_obs - lcdm_hz_fit(z_obs, 67.4, 0.315)) / err_H)**2)
+aic_planck = chi2_planck + 2 * k
+print(f"\nPlanck 2018 LCDM (H0=67.4) karşı Delta AIC: {aic_nltg - aic_planck:.2f} (Eksi değer NLTG lehine)")

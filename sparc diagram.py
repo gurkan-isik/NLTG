@@ -45,3 +45,44 @@ plt.legend(loc='upper left', fontsize=11)
 plt.tight_layout()
 plt.savefig('sparc_nltg_fit.png', dpi=300)
 plt.show()
+
+
+
+from sklearn.model_selection import KFold
+
+# 1. STANDART HATA (Covariance Matrix)
+k_err = np.sqrt(np.diag(pcov))[0]
+beta_err = 4 * (popt[0]**-5) * k_err # Hata yayılımı (Error propagation)
+print(f"Standart Hata ile Beta: {beta:.1f} ± {beta_err:.1f}")
+
+# 2. BOOTSTRAP ANALİZİ (1000 Tekrar)
+n_iterations = 1000
+boot_k = []
+for i in range(n_iterations):
+    # Veriyi yerine koyarak rastgele örnekle
+    sample = df_clean.sample(frac=1.0, replace=True)
+    try:
+        popt_boot, _ = curve_fit(nltg_model, sample['Mb'], sample['Vf'])
+        boot_k.append(popt_boot[0])
+    except:
+        continue
+
+boot_beta = (1 / np.array(boot_k))**4
+print(f"Bootstrap Beta Dağılımı: {np.mean(boot_beta):.1f} ± {np.std(boot_beta):.1f}")
+
+# 3. K-FOLD CROSS VALIDATION (5-Fold)
+kf = KFold(n_splits=5, shuffle=True, random_state=42)
+rms_scores = []
+for train_index, test_index in kf.split(df_clean):
+    train_data = df_clean.iloc[train_index]
+    test_data = df_clean.iloc[test_index]
+    
+    # Train setinde eğit
+    popt_cv, _ = curve_fit(nltg_model, train_data['Mb'], train_data['Vf'])
+    
+    # Test setinde RMS hesapla
+    predictions = nltg_model(test_data['Mb'], *popt_cv)
+    rms = np.sqrt(np.mean((test_data['Vf'] - predictions)**2))
+    rms_scores.append(rms)
+
+print(f"K-Fold Cross-Validation Ortalama RMS: {np.mean(rms_scores):.2f} ± {np.std(rms_scores):.2f} km/s")
